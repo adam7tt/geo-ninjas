@@ -5,14 +5,15 @@
 </template>
 
 <script>
-import firebase from 'firebase'
+import firebase, { firestore } from 'firebase'
+import firebaseApp from '@/firebase/init'
 
 export default {
     name: 'GMap',
     data(){
         return{
-            lat: 53,
-            lng: -2
+            lat: 0,
+            lng: 0
         }
     },
     methods: {
@@ -23,12 +24,56 @@ export default {
                 maxZoom: 15,
                 minZoom: 3,
                 streetViewControl: false
-            }) 
+            })
+             firebaseApp.collection('users').get().then(users => {
+                 users.docs.forEach(doc => {
+                     let data = doc.data()
+                     if(data.geolocation){
+                         let marker = new google.maps.Marker({
+                             //why data.geolocation.lat as opposed to data.geolocation.latitude? Why doesn't that work?
+                             position:{
+                                 lat: data.geolocation.lat,
+                                 lng: data.geolocation.lng
+                             },
+                             map: map
+                         })
+                         //Add click event to markers
+                         marker.addListener('click', () => {
+                             this.$router.push({ name: 'ViewProfile', params: {id: doc.id} })
+                         })
+                     }
+                 })
+             })
         }
     },
     mounted(){
-        this.renderMap()
-        console.log(firebase.auth().currentUser)
+        let user = firebase.auth().currentUser
+
+        if(navigator.geolocation){
+            navigator.geolocation.getCurrentPosition(pos => {
+                this.lat = pos.coords.latitude
+                this.lng = pos.coords.longitude
+
+                firebaseApp.collection('users').where('user_id', '==', user.uid).get()
+                .then(snapshot => {
+                    snapshot.forEach((doc) => {
+                        firebaseApp.collection('users').doc(doc.id).update({
+                            geolocation: {
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude
+                            }
+                        })
+                    })
+                }).then(() => {
+                    this.renderMap()                    
+                })
+            }, (err) => {
+                this.renderMap()
+            }, { maximumAge: 60000, timeout: 3000})
+        }
+        else{
+            this.renderMap()
+        }
     }
 }
 </script>
